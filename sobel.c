@@ -1,0 +1,113 @@
+#include "utils.h"
+
+u8_int initSobel(IRISCONFIG* s)
+{
+    s->sobel_st->minThreshold = 75;
+    s->sobel_st->maxThreshold = 125;
+
+    s->sobel_st->xMask[0][0] = -1;
+    s->sobel_st->xMask[0][1] = -2;
+    s->sobel_st->xMask[0][2] = -1;
+    s->sobel_st->xMask[1][0] =  0;
+    s->sobel_st->xMask[1][1] =  0;
+    s->sobel_st->xMask[1][2] =  0;
+    s->sobel_st->xMask[2][0] =  1;
+    s->sobel_st->xMask[2][1] =  2;
+    s->sobel_st->xMask[2][2] =  1;
+
+    s->sobel_st->yMask[0][0] = -1;
+    s->sobel_st->yMask[0][1] =  0;
+    s->sobel_st->yMask[0][2] =  1;
+    s->sobel_st->yMask[1][0] = -2;
+    s->sobel_st->yMask[1][1] =  0;
+    s->sobel_st->yMask[1][2] =  2;
+    s->sobel_st->yMask[2][0] = -1;
+    s->sobel_st->yMask[2][1] =  0;
+    s->sobel_st->yMask[2][2] =  1;
+
+    s->sobel_st->aveMap   = (u8_int*   )malloc(s->width * s->height);
+    s->sobel_st->edgeMap  = (u8_int*   )malloc(s->width * s->height);
+    s->sobel_st->angleMap = (s32_float*)malloc(s->width * s->height * sizeof(s32_float));
+    return 1;
+}
+
+
+u8_int averageFilter(IRISCONFIG* s)
+{
+    u16_int i,j;
+    s8_int  k,l;
+    u16_int sum;
+    for(i = 2; i < s->height-2;i++)
+    {
+        for(j = 2; j < s->width-2;j++)
+        {
+            sum = 0;
+            for (k = -2; k < 3; k++)
+            {
+                for (l = -2; l < 3; l++)
+                {
+                    sum += s->frame[s->width*(i + k) + (j + l)];
+                }
+            }
+            s->sobel_st->aveMap[s->width * i + j] = sum/25;
+        }
+    }
+    return 1;
+}
+
+
+u8_int runSobel(IRISCONFIG* s)
+{
+s16_int xGradient, yGradient;
+u16_int i,j;
+s8_int  k,l;
+u16_int magnitude;
+s32_float angle;
+
+averageFilter(s);
+//s->sobel_st->aveMap = s->frame;
+for (i = 1; i < s->height-1; i++)
+{
+    for (j = 1; j < s->width-1; j++)
+    {
+        xGradient = 0;
+        yGradient = 0;
+        for (k = -1; k < 2; k++)
+        {
+            for (l = -1; l < 2; l++)
+            {
+                xGradient += (s->sobel_st->aveMap[s->width*(i + k) + (j + l)])*s->sobel_st->xMask[k + 1][l + 1];
+                yGradient += (s->sobel_st->aveMap[s->width*(i + k) + (j + l)])*s->sobel_st->yMask[k + 1][l + 1];
+            }
+        }
+        magnitude = abs(xGradient) + abs(yGradient);
+        angle = atan2((s32_float)yGradient,(s32_float)xGradient) + PI;
+        if(magnitude > s->sobel_st->minThreshold && magnitude < s->sobel_st->maxThreshold)
+        {
+            s->sobel_st->edgeMap [s->width*i + j] = 255;
+            s->sobel_st->angleMap[s->width*i + j] = angle;
+        }
+        else
+        {
+            s->sobel_st->edgeMap [s->width*i + j] = 0;
+            s->sobel_st->angleMap[s->width*i + j] = 0;
+        }
+    }
+}
+        #if DEBUG
+        sprintf(sir, "edge_%04d_%04d_%04d.raw", ++count, s->width, s->height);
+        f = fopen(sir, "wb");
+        fwrite(s->sobel_st->edgeMap, 1, s->width * s->height, f);
+        fclose(f);
+        #endif // DEBUG
+
+return 1;
+}
+
+u8_int freeSobel(IRISCONFIG* s)
+{
+    free(s->sobel_st->edgeMap );
+    free(s->sobel_st->angleMap);
+    free(s->sobel_st->aveMap  );
+    return 1;
+}
